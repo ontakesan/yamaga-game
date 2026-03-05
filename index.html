@@ -273,7 +273,7 @@
   <button class="locate-btn" id="locateBtn" onclick="startWatching()">現在地を取得する</button>
 
   <!-- デバッグ用テスト解禁ボタン（確認後削除） -->
-  <button id="debugBtn" onclick="unlockMap()" style="
+  <button id="debugBtn" onclick="isUnlocked=false; unlockMap();" style="
     position:absolute; top:70px; right:10px; z-index:2000;
     background:#333; color:#ff0; border:1px solid #ff0;
     padding:6px 12px; font-size:11px; cursor:pointer;">
