@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>山鹿古墳めぐり</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Shippori+Mincho:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     :root {
       --ink: #1a1208;
@@ -14,490 +16,441 @@
       --moss: #4a5e2f;
       --faded: #c9b88a;
       --light-paper: #faf4e4;
+      --circle-far: rgba(184, 144, 42, 0.18);
+      --circle-mid: rgba(139, 58, 26, 0.22);
+      --circle-near: rgba(74, 94, 47, 0.35);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background-color: var(--aged-paper);
-      color: var(--ink);
+      background: var(--ink);
       font-family: 'Noto Serif JP', serif;
-      min-height: 100vh;
+      height: 100dvh;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
       overflow: hidden;
-      position: relative;
     }
 
-    /* 和紙テクスチャ背景 */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E");
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    /* 隅の装飾 */
-    .corner {
-      position: fixed;
-      width: 80px;
-      height: 80px;
-      opacity: 0.25;
-    }
-    .corner svg { width: 100%; height: 100%; }
-    .corner-tl { top: 12px; left: 12px; }
-    .corner-tr { top: 12px; right: 12px; transform: scaleX(-1); }
-    .corner-bl { bottom: 12px; left: 12px; transform: scaleY(-1); }
-    .corner-br { bottom: 12px; right: 12px; transform: scale(-1); }
-
-    .container {
-      position: relative;
-      z-index: 1;
-      width: min(92vw, 400px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0;
-    }
-
-    /* タイトル帯 */
-    .title-band {
-      width: 100%;
+    /* ヘッダー */
+    .header {
       background: var(--rust);
-      padding: 6px 0 4px;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
+      padding: 10px 16px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      z-index: 1000;
     }
-    .title-band::before, .title-band::after {
-      content: '◆';
-      position: absolute;
-      color: var(--old-gold);
-      font-size: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      opacity: 0.7;
-    }
-    .title-band::before { left: 14px; }
-    .title-band::after { right: 14px; }
-
-    .subtitle {
+    .header-title {
       color: var(--aged-paper);
-      font-size: 11px;
-      letter-spacing: 0.4em;
-      font-family: 'Shippori Mincho', serif;
-      opacity: 0.9;
-    }
-
-    .main-title {
-      font-size: clamp(26px, 7vw, 34px);
+      font-size: 18px;
       font-weight: 900;
       letter-spacing: 0.15em;
-      color: var(--ink);
-      text-align: center;
-      padding: 18px 0 14px;
-      position: relative;
     }
-    .main-title span {
-      color: var(--rust);
-    }
-
-    /* メインカード */
-    .card {
-      width: 100%;
-      background: var(--light-paper);
-      border: 1.5px solid var(--faded);
-      border-top: none;
-      padding: 28px 24px 32px;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 22px;
-    }
-
-    /* 古墳シルエット装飾 */
-    .kofun-icon {
-      width: 72px;
-      height: 46px;
-      opacity: 0.15;
-      position: absolute;
-      top: 14px;
-      right: 18px;
-    }
-
-    /* 位置情報パネル */
-    .location-panel {
-      width: 100%;
-      background: var(--aged-paper);
-      border: 1px solid var(--faded);
-      padding: 20px 18px;
-      position: relative;
-    }
-    .location-panel::before {
-      content: '現在地情報';
-      position: absolute;
-      top: -10px;
-      left: 16px;
-      background: var(--aged-paper);
-      padding: 0 8px;
-      font-size: 11px;
-      letter-spacing: 0.25em;
-      color: var(--moss);
+    .header-title span { color: var(--old-gold); }
+    .header-sub {
+      color: var(--aged-paper);
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      opacity: 0.7;
       font-family: 'Shippori Mincho', serif;
     }
 
-    .coord-row {
-      display: flex;
-      align-items: baseline;
-      gap: 10px;
-      margin-bottom: 10px;
+    /* マップ */
+    #map {
+      flex: 1;
+      width: 100%;
+      z-index: 1;
     }
-    .coord-row:last-child { margin-bottom: 0; }
 
-    .coord-label {
+    /* 距離パネル（マップ上に重ねる） */
+    .distance-panel {
+      position: absolute;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(26, 18, 8, 0.88);
+      border: 1px solid var(--faded);
+      padding: 12px 20px;
+      min-width: 220px;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+    .distance-label {
+      color: var(--faded);
+      font-size: 10px;
+      letter-spacing: 0.35em;
+      font-family: 'Shippori Mincho', serif;
+      margin-bottom: 4px;
+    }
+    .distance-value {
+      color: var(--aged-paper);
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 0.05em;
+    }
+    .distance-value span {
+      font-size: 13px;
+      opacity: 0.6;
+      margin-left: 4px;
+    }
+    .distance-status {
+      margin-top: 6px;
       font-size: 12px;
       letter-spacing: 0.2em;
-      color: var(--moss);
-      min-width: 44px;
       font-family: 'Shippori Mincho', serif;
+      padding: 3px 10px;
+      display: inline-block;
     }
+    .status-far    { color: var(--old-gold); }
+    .status-mid    { color: #e07040; }
+    .status-near   { color: #7ec870; }
+    .status-waiting { color: var(--faded); }
 
-    .coord-value {
-      font-family: 'Courier New', monospace;
-      font-size: 22px;
-      font-weight: bold;
-      color: var(--ink);
-      letter-spacing: 0.05em;
-      transition: all 0.4s ease;
-    }
-
-    .coord-unit {
-      font-size: 11px;
-      color: var(--faded);
-      letter-spacing: 0.1em;
-    }
-
-    /* 精度表示 */
-    .accuracy-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px dashed var(--faded);
-    }
-    .accuracy-label {
-      font-size: 11px;
-      color: var(--faded);
-      letter-spacing: 0.2em;
-      font-family: 'Shippori Mincho', serif;
-    }
-    .accuracy-value {
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-      color: var(--moss);
-    }
-
-    /* ステータス */
-    .status-area {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-height: 28px;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--faded);
-      flex-shrink: 0;
-    }
-    .status-dot.searching {
-      background: var(--old-gold);
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-    .status-dot.success { background: var(--moss); }
-    .status-dot.error { background: var(--rust); }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.8); }
-    }
-
-    .status-text {
-      font-size: 13px;
-      letter-spacing: 0.15em;
-      color: var(--ink);
-      font-family: 'Shippori Mincho', serif;
-    }
-
-    /* ボタン */
-    .locate-btn {
-      width: 100%;
-      padding: 16px 0;
-      background: var(--rust);
+    /* 地図解禁ボタン */
+    .unlock-btn {
+      position: absolute;
+      bottom: 160px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1001;
+      background: var(--moss);
       color: var(--aged-paper);
-      border: none;
+      border: 2px solid var(--old-gold);
+      padding: 14px 32px;
       font-family: 'Noto Serif JP', serif;
       font-size: 16px;
       font-weight: 700;
       letter-spacing: 0.4em;
       cursor: pointer;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.25s;
-      outline: none;
+      display: none;
+      animation: glow 1.5s ease-in-out infinite;
+      white-space: nowrap;
     }
-    .locate-btn:active { background: var(--ink); }
-    .locate-btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to bottom, rgba(255,255,255,0.08) 0%, transparent 100%);
-      pointer-events: none;
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 8px rgba(184,144,42,0.4); }
+      50%       { box-shadow: 0 0 22px rgba(184,144,42,0.9); }
     }
-
-    .locate-btn:disabled {
-      background: var(--faded);
+    .unlock-btn.visible { display: block; }
+    .unlock-btn.unlocked {
+      background: var(--rust);
+      animation: none;
+      box-shadow: none;
       cursor: default;
     }
 
-    /* 区切り線 */
-    .divider {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--faded);
-    }
-    .divider-text {
-      font-size: 10px;
-      color: var(--faded);
-      letter-spacing: 0.35em;
-      font-family: 'Shippori Mincho', serif;
-    }
-
-    /* 更新時刻 */
-    .timestamp {
-      font-size: 11px;
-      color: var(--faded);
-      letter-spacing: 0.15em;
-      font-family: 'Shippori Mincho', serif;
-      text-align: center;
-    }
-
-    /* フッター帯 */
-    .footer-band {
-      width: 100%;
-      background: var(--moss);
-      padding: 5px 0;
-      text-align: center;
-    }
-    .footer-text {
+    /* 現在地取得ボタン */
+    .locate-btn {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: var(--rust);
       color: var(--aged-paper);
-      font-size: 10px;
-      letter-spacing: 0.5em;
-      opacity: 0.7;
+      border: none;
+      padding: 14px 36px;
+      font-family: 'Noto Serif JP', serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.35em;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .locate-btn:disabled {
+      background: #555;
+      cursor: default;
     }
 
-    /* 更新アニメーション */
-    .updated .coord-value {
-      color: var(--moss);
+    /* GPS状態ドット */
+    .gps-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--faded);
+      display: inline-block;
+      margin-right: 6px;
+      vertical-align: middle;
     }
+    .gps-dot.on  { background: #7ec870; animation: pulse 1.2s infinite; }
+    .gps-dot.err { background: var(--rust); }
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:0.4; }
+    }
+
+    /* Leafletのデフォルトを和風に調整 */
+    .leaflet-control-zoom a {
+      background: var(--light-paper) !important;
+      color: var(--ink) !important;
+      border-color: var(--faded) !important;
+    }
+
+    /* 解禁トースト */
+    .toast {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2000;
+      background: var(--moss);
+      color: var(--aged-paper);
+      border: 1px solid var(--old-gold);
+      padding: 12px 24px;
+      font-size: 14px;
+      letter-spacing: 0.25em;
+      font-family: 'Shippori Mincho', serif;
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
   </style>
 </head>
 <body>
 
-  <!-- 隅の装飾 -->
-  <div class="corner corner-tl">
-    <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M4 4 L4 76" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L76 4" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L20 20" stroke="#8b3a1a" stroke-width="1"/>
-      <circle cx="4" cy="4" r="3" fill="#8b3a1a"/>
-      <circle cx="14" cy="14" r="2" fill="#8b3a1a" opacity="0.5"/>
-    </svg>
-  </div>
-  <div class="corner corner-tr">
-    <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M4 4 L4 76" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L76 4" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L20 20" stroke="#8b3a1a" stroke-width="1"/>
-      <circle cx="4" cy="4" r="3" fill="#8b3a1a"/>
-      <circle cx="14" cy="14" r="2" fill="#8b3a1a" opacity="0.5"/>
-    </svg>
-  </div>
-  <div class="corner corner-bl">
-    <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M4 4 L4 76" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L76 4" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L20 20" stroke="#8b3a1a" stroke-width="1"/>
-      <circle cx="4" cy="4" r="3" fill="#8b3a1a"/>
-      <circle cx="14" cy="14" r="2" fill="#8b3a1a" opacity="0.5"/>
-    </svg>
-  </div>
-  <div class="corner corner-br">
-    <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M4 4 L4 76" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L76 4" stroke="#8b3a1a" stroke-width="2"/>
-      <path d="M4 4 L20 20" stroke="#8b3a1a" stroke-width="1"/>
-      <circle cx="4" cy="4" r="3" fill="#8b3a1a"/>
-      <circle cx="14" cy="14" r="2" fill="#8b3a1a" opacity="0.5"/>
-    </svg>
-  </div>
-
-  <div class="container">
-
-    <div class="title-band">
-      <div class="subtitle">YAMAGA KOFUN MEGURI</div>
+  <div class="header">
+    <div>
+      <div class="header-title">山鹿<span>古墳</span>めぐり</div>
+      <div class="header-sub">YAMAGA KOFUN MEGURI</div>
     </div>
-
-    <h1 class="main-title">山鹿<span>古墳</span>めぐり</h1>
-
-    <div class="card">
-
-      <!-- 古墳シルエット装飾 -->
-      <svg class="kofun-icon" viewBox="0 0 72 46" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="36" cy="38" rx="36" ry="8" fill="#1a1208"/>
-        <ellipse cx="36" cy="24" rx="22" ry="16" fill="#1a1208"/>
-        <ellipse cx="36" cy="14" rx="10" ry="8" fill="#1a1208"/>
-      </svg>
-
-      <!-- 位置情報パネル -->
-      <div class="location-panel" id="locationPanel">
-        <div class="coord-row">
-          <span class="coord-label">緯 度</span>
-          <span class="coord-value" id="latVal">———</span>
-          <span class="coord-unit">°N</span>
-        </div>
-        <div class="coord-row">
-          <span class="coord-label">経 度</span>
-          <span class="coord-value" id="lonVal">———</span>
-          <span class="coord-unit">°E</span>
-        </div>
-        <div class="accuracy-row">
-          <span class="accuracy-label">測位精度</span>
-          <span class="accuracy-value" id="accVal">— m</span>
-        </div>
+    <div style="text-align:right">
+      <div style="color:var(--aged-paper);font-size:11px;letter-spacing:0.2em;font-family:'Shippori Mincho',serif">
+        <span class="gps-dot" id="gpsDot"></span><span id="gpsLabel">未取得</span>
       </div>
-
-      <!-- ステータス -->
-      <div class="status-area">
-        <div class="status-dot" id="statusDot"></div>
-        <span class="status-text" id="statusText">ボタンを押して位置を取得</span>
-      </div>
-
-      <!-- ボタン -->
-      <button class="locate-btn" id="locateBtn" onclick="getLocation()">
-        現在地を取得する
-      </button>
-
-      <div class="divider">
-        <span class="divider-text">▪ 山鹿市 古墳 ▪</span>
-      </div>
-
-      <div class="timestamp" id="timestamp">最終取得：未取得</div>
-
     </div>
-
-    <div class="footer-band">
-      <div class="footer-text">STEP 1 — 位置情報取得</div>
-    </div>
-
   </div>
 
-  <script>
-    let watchId = null;
+  <div id="map" style="position:relative"></div>
 
-    function setStatus(type, text) {
-      const dot = document.getElementById('statusDot');
-      const msg = document.getElementById('statusText');
-      dot.className = 'status-dot ' + type;
-      msg.textContent = text;
+  <!-- 距離パネル -->
+  <div class="distance-panel" id="distPanel">
+    <div class="distance-label">古墳までの距離</div>
+    <div class="distance-value" id="distVal">———<span>m</span></div>
+    <div class="distance-status status-waiting" id="distStatus">現在地を取得してください</div>
+  </div>
+
+  <!-- 地図解禁ボタン -->
+  <button class="unlock-btn" id="unlockBtn" onclick="unlockMap()">⛩ 地図を解禁する</button>
+
+  <!-- 現在地取得ボタン -->
+  <button class="locate-btn" id="locateBtn" onclick="startWatching()">現在地を取得する</button>
+
+  <!-- トースト -->
+  <div class="toast" id="toast">🗺️ 地図が解禁されました！</div>
+
+<script>
+  // ========== 設定 ==========
+  const KOFUN = {
+    lat: 32.968486,
+    lng: 130.695630,
+    name: 'テスト古墳（作業場所）'
+  };
+  const R_FAR  = 1000; // 1km：外円
+  const R_MID  =  500; // 500m：中円
+  const R_NEAR =    5; // 5m：解禁圏（テスト用）
+
+  // ========== 地図初期化 ==========
+  const map = L.map('map', { zoomControl: true }).setView([KOFUN.lat, KOFUN.lng], 15);
+
+  // OpenStreetMap（無料）
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map);
+
+  // 古墳マーカー
+  const kofunIcon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:32px;height:32px;
+      background:var(--rust,#8b3a1a);
+      border:2px solid #b8902a;
+      border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      display:flex;align-items:center;justify-content:center;
+    "><span style="transform:rotate(45deg);font-size:14px">⛩</span></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32]
+  });
+  L.marker([KOFUN.lat, KOFUN.lng], { icon: kofunIcon })
+    .addTo(map)
+    .bindPopup(`<b>${KOFUN.name}</b><br>古墳ポイント`);
+
+  // 距離円（外→内の順で描画）
+  const circleFar = L.circle([KOFUN.lat, KOFUN.lng], {
+    radius: R_FAR,
+    color: '#b8902a', weight: 1.5, opacity: 0.7,
+    fillColor: '#b8902a', fillOpacity: 0.06
+  }).addTo(map);
+
+  const circleMid = L.circle([KOFUN.lat, KOFUN.lng], {
+    radius: R_MID,
+    color: '#8b3a1a', weight: 1.5, opacity: 0.7,
+    fillColor: '#8b3a1a', fillOpacity: 0.08
+  }).addTo(map);
+
+  const circleNear = L.circle([KOFUN.lat, KOFUN.lng], {
+    radius: R_NEAR,
+    color: '#4a5e2f', weight: 2, opacity: 0.9,
+    fillColor: '#4a5e2f', fillOpacity: 0.15
+  }).addTo(map);
+
+  // 現在地マーカー（後で更新）
+  let userMarker = null;
+  let watchId    = null;
+  let isUnlocked = false;
+
+  // ========== 距離計算（Haversine公式）==========
+  function calcDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000; // 地球半径(m)
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) ** 2 +
+              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+              Math.sin(dLng/2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // ========== 位置情報取得 ==========
+  function startWatching() {
+    if (!navigator.geolocation) {
+      alert('このブラウザは位置情報に対応していません');
+      return;
+    }
+    const btn = document.getElementById('locateBtn');
+    btn.disabled = true;
+    btn.textContent = '取得中…';
+    setGps('on', 'GPS取得中');
+
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+
+    watchId = navigator.geolocation.watchPosition(
+      onPosition,
+      onError,
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  function onPosition(pos) {
+    const { latitude: lat, longitude: lng } = pos.coords;
+
+    // ボタン更新
+    const btn = document.getElementById('locateBtn');
+    btn.disabled = false;
+    btn.textContent = '現在地を更新中 ●';
+    setGps('on', '取得済み');
+
+    // 現在地マーカー更新
+    if (userMarker) {
+      userMarker.setLatLng([lat, lng]);
+    } else {
+      const userIcon = L.divIcon({
+        className: '',
+        html: `<div style="
+          width:16px;height:16px;
+          background:#4a9fff;
+          border:3px solid #fff;
+          border-radius:50%;
+          box-shadow:0 0 8px rgba(74,159,255,0.8);
+        "></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      userMarker = L.marker([lat, lng], { icon: userIcon })
+        .addTo(map)
+        .bindPopup('現在地');
+      map.setView([lat, lng], 15);
     }
 
-    function updateDisplay(lat, lon, acc) {
-      const panel = document.getElementById('locationPanel');
+    // 距離計算
+    const dist = calcDistance(lat, lng, KOFUN.lat, KOFUN.lng);
+    updateDistanceUI(dist);
+  }
 
-      document.getElementById('latVal').textContent = lat.toFixed(6);
-      document.getElementById('lonVal').textContent = lon.toFixed(6);
-      document.getElementById('accVal').textContent =
-        acc < 9999 ? `± ${Math.round(acc)} m` : '計測中…';
+  function onError(err) {
+    const btn = document.getElementById('locateBtn');
+    btn.disabled = false;
+    btn.textContent = '再取得する';
+    setGps('err', 'エラー');
 
-      // 更新フラッシュ
-      panel.classList.add('updated');
-      setTimeout(() => panel.classList.remove('updated'), 1000);
+    const msgs = {
+      1: '位置情報が拒否されました。設定から許可してください。',
+      2: '位置情報を取得できませんでした。',
+      3: 'タイムアウトしました。再度お試しください。'
+    };
+    document.getElementById('distStatus').textContent = msgs[err.code] || 'エラー';
+    document.getElementById('distStatus').className = 'distance-status status-far';
+  }
 
-      // タイムスタンプ
-      const now = new Date();
-      const h = String(now.getHours()).padStart(2, '0');
-      const m = String(now.getMinutes()).padStart(2, '0');
-      const s = String(now.getSeconds()).padStart(2, '0');
-      document.getElementById('timestamp').textContent =
-        `最終取得：${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${h}:${m}:${s}`;
+  // ========== UI更新 ==========
+  function updateDistanceUI(dist) {
+    const valEl    = document.getElementById('distVal');
+    const statusEl = document.getElementById('distStatus');
+    const unlockBtn = document.getElementById('unlockBtn');
+
+    // 距離表示
+    if (dist >= 1000) {
+      valEl.innerHTML = (dist / 1000).toFixed(2) + '<span>km</span>';
+    } else {
+      valEl.innerHTML = Math.round(dist) + '<span>m</span>';
     }
 
-    function getLocation() {
-      // Geolocation API が使えるか確認
-      if (!navigator.geolocation) {
-        setStatus('error', 'このブラウザは位置情報に対応していません');
-        return;
+    // ステータス・円の色変化
+    if (dist <= R_NEAR) {
+      statusEl.textContent  = '◎ 古墳の真近！地図を解禁できます';
+      statusEl.className    = 'distance-status status-near';
+      // 解禁ボタン表示（未解禁なら）
+      if (!isUnlocked) unlockBtn.classList.add('visible');
+      // 近接円を強調
+      circleNear.setStyle({ color: '#7ec870', fillColor: '#7ec870', fillOpacity: 0.3 });
+    } else if (dist <= R_MID) {
+      statusEl.textContent  = '▲ もう少し近づいてください（500m以内）';
+      statusEl.className    = 'distance-status status-mid';
+      unlockBtn.classList.remove('visible');
+      circleNear.setStyle({ color: '#4a5e2f', fillColor: '#4a5e2f', fillOpacity: 0.15 });
+    } else if (dist <= R_FAR) {
+      statusEl.textContent  = '● 古墳を感知しました（1km以内）';
+      statusEl.className    = 'distance-status status-far';
+      unlockBtn.classList.remove('visible');
+      circleNear.setStyle({ color: '#4a5e2f', fillColor: '#4a5e2f', fillOpacity: 0.15 });
+    } else {
+      statusEl.textContent  = '古墳の範囲外です';
+      statusEl.className    = 'distance-status status-waiting';
+      unlockBtn.classList.remove('visible');
+      circleNear.setStyle({ color: '#4a5e2f', fillColor: '#4a5e2f', fillOpacity: 0.15 });
+    }
+  }
+
+  function setGps(state, label) {
+    document.getElementById('gpsDot').className  = 'gps-dot ' + state;
+    document.getElementById('gpsLabel').textContent = label;
+  }
+
+  // ========== 地図解禁 ==========
+  function unlockMap() {
+    if (isUnlocked) return;
+    isUnlocked = true;
+
+    const btn = document.getElementById('unlockBtn');
+    btn.textContent = '✓ 解禁済み';
+    btn.classList.add('unlocked');
+
+    // トースト表示
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+
+    // 古墳マーカーをポップアップ表示
+    map.eachLayer(l => {
+      if (l.getPopup && l.getLatLng) {
+        const latlng = l.getLatLng();
+        if (Math.abs(latlng.lat - KOFUN.lat) < 0.0001) l.openPopup();
       }
-
-      const btn = document.getElementById('locateBtn');
-      btn.disabled = true;
-      btn.textContent = '取得中…';
-      setStatus('searching', 'GPS信号を探しています…');
-
-      // 既存の監視を停止
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-      }
-
-      // 位置情報を継続的に監視（リアルタイム更新）
-      watchId = navigator.geolocation.watchPosition(
-        function(pos) {
-          // 成功
-          btn.disabled = false;
-          btn.textContent = '現在地を再取得する';
-          setStatus('success', '位置情報を取得しました ✓');
-          updateDisplay(
-            pos.coords.latitude,
-            pos.coords.longitude,
-            pos.coords.accuracy
-          );
-        },
-        function(err) {
-          // 失敗
-          btn.disabled = false;
-          btn.textContent = '現在地を再取得する';
-
-          const messages = {
-            1: '位置情報の使用が拒否されました。\nブラウザの設定から許可してください。',
-            2: '位置情報を取得できませんでした。\n電波状況を確認してください。',
-            3: '取得がタイムアウトしました。\n再度お試しください。'
-          };
-          setStatus('error', messages[err.code] || '不明なエラーが発生しました');
-        },
-        {
-          enableHighAccuracy: true,   // GPSを優先（精度優先）
-          timeout: 15000,             // 15秒でタイムアウト
-          maximumAge: 0               // キャッシュを使わず常に新鮮な位置情報を取得
-        }
-      );
-    }
-  </script>
+    });
+  }
+</script>
 </body>
 </html>
