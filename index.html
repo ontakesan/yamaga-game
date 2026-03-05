@@ -255,11 +255,29 @@
   // ========== 地図初期化 ==========
   const map = L.map('map', { zoomControl: true }).setView([KOFUN.lat, KOFUN.lng], 15);
 
-  // OpenStreetMap（無料）
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
-    maxZoom: 19
-  }).addTo(map);
+  // ── 解禁前：国土地理院 淡色地図（パステル調・控えめ） ──
+  const tileNormal = L.tileLayer(
+    'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+    {
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+      maxZoom: 18,
+      opacity: 1.0
+    }
+  );
+
+  // ── 解禁後：国土地理院 明治期の地形図（アンティーク・歴史地図） ──
+  const tileHistory = L.tileLayer(
+    'https://cyberjapandata.gsi.go.jp/xyz/meiji/{z}/{x}/{y}.png',
+    {
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院（明治期地形図）</a>',
+      maxZoom: 16,
+      opacity: 0
+    }
+  );
+
+  // 両方を追加（重ね合わせ。最初は歴史地図を透明にしておく）
+  tileNormal.addTo(map);
+  tileHistory.addTo(map);
 
   // 古墳マーカー
   const kofunIcon = L.divIcon({
@@ -441,7 +459,24 @@
     // トースト表示
     const toast = document.getElementById('toast');
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3000);
+    setTimeout(() => toast.classList.remove('show'), 3500);
+
+    // ── 地図切り替えアニメーション（約2秒でフェード） ──
+    let opacity = 0;
+    const fadeInterval = setInterval(() => {
+      opacity += 0.02;
+      if (opacity >= 1) {
+        opacity = 1;
+        clearInterval(fadeInterval);
+      }
+      tileHistory.setOpacity(opacity);    // 歴史地図：透明→不透明
+      tileNormal.setOpacity(1 - opacity); // 淡色地図：不透明→透明
+    }, 40);
+
+    // 明治地形図は最大ズーム16なので、超えていたら調整
+    setTimeout(() => {
+      if (map.getZoom() > 16) map.setZoom(16);
+    }, 2000);
 
     // 古墳マーカーをポップアップ表示
     map.eachLayer(l => {
