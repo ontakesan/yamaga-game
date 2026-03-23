@@ -272,14 +272,6 @@
   <!-- 現在地取得ボタン -->
   <button class="locate-btn" id="locateBtn" onclick="startWatching()">現在地を取得する</button>
 
-  <!-- デバッグ用テスト解禁ボタン（確認後削除） -->
-  <button id="debugBtn" onclick="isUnlocked=false; unlockMap();" style="
-    position:absolute; top:70px; right:10px; z-index:2000;
-    background:#333; color:#ff0; border:1px solid #ff0;
-    padding:6px 12px; font-size:11px; cursor:pointer;">
-    🔧 DEBUG解禁
-  </button>
-
   <!-- トースト -->
   <div class="toast" id="toast">🗺️ 地図が解禁されました！</div>
 
@@ -287,385 +279,275 @@
   // ========== 設定 ==========
   const AREAS = {
     south: {
-      name: '南エリア',
-      color: '#8b3a1a',
+      name: '南エリア', color: '#8b3a1a',
       polygon: [
-        [33.000, 130.783], [32.980, 130.770], [32.950, 130.750],
-        [32.910, 130.730], [32.890, 130.680], [32.895, 130.620],
-        [32.920, 130.575], [32.960, 130.555], [33.000, 130.560]
+        [33.000,130.783],[32.980,130.770],[32.950,130.750],
+        [32.910,130.730],[32.890,130.680],[32.895,130.620],
+        [32.920,130.575],[32.960,130.555],[33.000,130.560]
       ]
     },
     north: {
-      name: '北エリア',
-      color: '#4a5e2f',
+      name: '北エリア', color: '#4a5e2f',
       polygon: [
-        [33.115, 130.735], [33.105, 130.800], [33.075, 130.820],
-        [33.040, 130.810], [33.010, 130.790], [33.000, 130.783],
-        [33.000, 130.560], [33.040, 130.570], [33.075, 130.590],
-        [33.095, 130.630], [33.110, 130.680]
+        [33.115,130.735],[33.105,130.800],[33.075,130.820],
+        [33.040,130.810],[33.010,130.790],[33.000,130.783],
+        [33.000,130.560],[33.040,130.570],[33.075,130.590],
+        [33.095,130.630],[33.110,130.680]
       ]
     }
   };
 
   const KOFUN_LIST = [
     { lat:32.968486, lng:130.695630, name:'テスト古墳（作業場所）', desc:'テスト用のポイントです。', areaId:'south' },
-    { lat:33.029878, lng:130.669522, name:'チブサン古墳', desc:'6世紀初頭に築造された前方後円墳。石室内の壁に描かれた幾何学模様が有名。国指定史跡。', areaId:'north' },
-    { lat:33.030831, lng:130.667303, name:'オブサン古墳', desc:'チブサン古墳の北西約200mに位置する円墳。チブサンと合わせて国指定史跡。', areaId:'north' },
-    { lat:32.995704, lng:130.669882, name:'岩原古墳群', desc:'5世紀に築造された古墳群。岩原双子塚古墳は熊本県最大級の前方後円墳で全長107m。', areaId:'south' }
+    { lat:33.029878, lng:130.669522, name:'チブサン古墳', desc:'6世紀初頭に築造された前方後円墳。国指定史跡。', areaId:'north' },
+    { lat:33.030831, lng:130.667303, name:'オブサン古墳', desc:'チブサン古墳の北西約200mに位置する円墳。国指定史跡。', areaId:'north' },
+    { lat:32.995704, lng:130.669882, name:'岩原古墳群', desc:'5世紀に築造。岩原双子塚古墳は熊本県最大級の前方後円墳（全長107m）。', areaId:'south' }
   ];
 
-  const R_FAR   = 1000;
-  const R_MID   =  500;
-  const R_CLOSE =  100;
-  const R_NEAR  =   50;
-
-  let currentKofunIndex = 0;
-  let KOFUN = KOFUN_LIST[0];
-  let userMarker = null;
-  let watchId    = null;
-  let isUnlocked = false;
-  const unlockedKofunSet = new Set(); // 解禁済み古墳インデックス
-  const unlockedAreaSet  = new Set(); // 解禁済みエリアID
+  const R_FAR=1000, R_MID=500, R_CLOSE=100, R_NEAR=50;
+  let currentKofunIndex=0, KOFUN=KOFUN_LIST[0];
+  let userMarker=null, watchId=null, isUnlocked=false;
+  const unlockedKofunSet=new Set(), unlockedAreaSet=new Set();
 
   // ========== 地図初期化 ==========
-  const map = L.map('map', { zoomControl: true }).setView([33.0, 130.68], 13);
+  const map = L.map('map',{zoomControl:true}).setView([33.0,130.68],13);
 
-  // 下層：歴史地図（全面・常時表示）
-  const tileHistory = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/ort_old10/{z}/{x}/{y}.png', {
-    attribution: '国土地理院（空中写真1961〜1969年）', minZoom: 8, maxZoom: 17
-  }).addTo(map);
+  // 下層：歴史地図（常時全面表示）
+  const tileHistory = L.tileLayer(
+    'https://cyberjapandata.gsi.go.jp/xyz/ort_old10/{z}/{x}/{y}.png',
+    {attribution:'国土地理院（空中写真1961〜1969年）', minZoom:8, maxZoom:17}
+  ).addTo(map);
 
-  // 上層：通常地図（専用pane）
+  // 上層：通常地図（専用pane・高いzIndex）
   map.createPane('normalPane');
-  map.getPane('normalPane').style.zIndex = 250;
-  const tileNormal = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors', maxZoom: 19,
-    pane: 'normalPane'
-  }).addTo(map);
+  map.getPane('normalPane').style.zIndex = 400;
+  const tileNormal = L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {attribution:'© OpenStreetMap contributors', maxZoom:19, pane:'normalPane'}
+  ).addTo(map);
 
-  // 解禁済みエリアのポリゴン座標を保持
-  const unlockedAreaPolygons = {};
+  // ── エリアごとに「通常地図を覆うマスクポリゴン」を専用paneに配置 ──
+  // 解禁時にそのエリアのマスクをフェードアウトで除去する
+  map.createPane('maskPane');
+  map.getPane('maskPane').style.zIndex = 450; // normalPaneより上
+  map.getPane('maskPane').style.pointerEvents = 'none';
 
-  // normalPaneのCSS clip-pathを更新（解禁エリアを切り抜く）
-  // clip-path: polygon() はSVGと違い「残す領域」を指定するため
-  // 全面矩形から解禁エリアを除外するにはSVG clipPathのevenoddを使う
-  // → normalPaneのSVGにclipPath要素を動的に挿入する方式
-  const paneEl = map.getPane('normalPane');
+  const areaMaskLayers = {};
+  Object.entries(AREAS).forEach(([id, area]) => {
+    // 通常地図と同じ見た目に見えるよう半透明白で覆う（実際は通常地図が見えている）
+    // → 解禁するとこのマスクが消えて下の歴史地図が露出する
+    areaMaskLayers[id] = L.polygon(area.polygon, {
+      pane: 'maskPane',
+      color: 'transparent',
+      fillColor: '#f5f3ef',
+      fillOpacity: 0.97,
+      interactive: false
+    }).addTo(map);
+  });
 
-  // SVGをpane直下に追加
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const maskSvg = document.createElementNS(svgNS, 'svg');
-  maskSvg.setAttribute('xmlns', svgNS);
-  maskSvg.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;';
-  const maskDefs = document.createElementNS(svgNS, 'defs');
-  const maskClip = document.createElementNS(svgNS, 'clipPath');
-  maskClip.setAttribute('id', 'nmClip');
-  maskClip.setAttribute('clipPathUnits', 'userSpaceOnUse');
-  // 全面を覆う矩形（even-oddのベース）
-  const maskBase = document.createElementNS(svgNS, 'rect');
-  maskBase.setAttribute('x', '-99999'); maskBase.setAttribute('y', '-99999');
-  maskBase.setAttribute('width', '199998'); maskBase.setAttribute('height', '199998');
-  maskClip.appendChild(maskBase);
-  maskDefs.appendChild(maskClip);
-  maskSvg.appendChild(maskDefs);
-  document.body.appendChild(maskSvg); // bodyに追加（pane外でも参照可）
-
-  // paneにclipPathを適用
-  paneEl.style.clipPath = 'none'; // 初期はクリップなし（全面通常地図）
-
-  function rebuildClip() {
-    const ids = Object.keys(unlockedAreaPolygons);
-    if (ids.length === 0) {
-      paneEl.style.clipPath = 'none';
-      return;
-    }
-    // 既存の穴ポリゴンを削除
-    maskClip.querySelectorAll('polygon').forEach(p => p.remove());
-    // even-odd：矩形の上に解禁エリアのポリゴンを重ねると穴が開く
-    ids.forEach(id => {
-      const poly = document.createElementNS(svgNS, 'polygon');
-      const pts = unlockedAreaPolygons[id].map(([lat, lng]) => {
-        const p = map.latLngToLayerPoint([lat, lng]);
-        return `${p.x},${p.y}`;
-      }).join(' ');
-      poly.setAttribute('points', pts);
-      maskClip.appendChild(poly);
-    });
-    paneEl.style.clipPath = 'url(#nmClip)';
-    // even-odd をCSSでは指定できないためSVG要素に設定
-    maskClip.querySelectorAll('rect,polygon').forEach(el => {
-      el.setAttribute('fill-rule','evenodd');
-      el.setAttribute('clip-rule','evenodd');
-    });
-  }
-
-  map.on('move zoom moveend zoomend viewreset', rebuildClip);
-
-  // エリア境界線（破線）
+  // エリア境界線（マスクより上のpane）
+  map.createPane('borderPane');
+  map.getPane('borderPane').style.zIndex = 500;
+  map.getPane('borderPane').style.pointerEvents = 'none';
   const areaPolygons = {};
-  const areaMasks = {}; // 互換用（使用しない）
   Object.entries(AREAS).forEach(([id, area]) => {
     areaPolygons[id] = L.polygon(area.polygon, {
-      color: area.color, weight: 2, opacity: 0.5,
+      pane: 'borderPane',
+      color: area.color, weight: 2, opacity: 0.6,
       fillOpacity: 0, dashArray: '6,4'
     }).addTo(map);
   });
 
   // 古墳アイコン
   const kofunIcon = L.divIcon({
-    className: '',
-    html: `<div style="width:32px;height:32px;background:#8b3a1a;border:2px solid #b8902a;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px">⛩</span></div>`,
-    iconSize: [32, 32], iconAnchor: [16, 32]
+    className:'',
+    html:`<div style="width:32px;height:32px;background:#8b3a1a;border:2px solid #b8902a;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:14px">⛩</span></div>`,
+    iconSize:[32,32], iconAnchor:[16,32]
   });
   const kofunMarkers = new Array(KOFUN_LIST.length).fill(null);
 
   // 距離円
-  let circleFar = L.circle([KOFUN.lat, KOFUN.lng], {
-    radius: R_FAR, color: '#b8902a', weight: 1.5, opacity: 0.7,
-    fillColor: '#b8902a', fillOpacity: 0.06
-  }).addTo(map);
-  let circleMid = L.circle([KOFUN.lat, KOFUN.lng], {
-    radius: R_MID, color: '#8b3a1a', weight: 1.5, opacity: 0, fillOpacity: 0
-  }).addTo(map);
-  let circleClose = L.circle([KOFUN.lat, KOFUN.lng], {
-    radius: R_CLOSE, color: '#c07030', weight: 1.5, opacity: 0, fillOpacity: 0
-  }).addTo(map);
-  let circleNear = L.circle([KOFUN.lat, KOFUN.lng], {
-    radius: R_NEAR, color: '#4a5e2f', weight: 2, opacity: 0, fillOpacity: 0
-  }).addTo(map);
-  const circleShown = { mid: false, close: false, near: false };
+  let circleFar   = L.circle([KOFUN.lat,KOFUN.lng],{radius:R_FAR,  color:'#b8902a',weight:1.5,opacity:0.7,fillColor:'#b8902a',fillOpacity:0.06}).addTo(map);
+  let circleMid   = L.circle([KOFUN.lat,KOFUN.lng],{radius:R_MID,  color:'#8b3a1a',weight:1.5,opacity:0,fillOpacity:0}).addTo(map);
+  let circleClose = L.circle([KOFUN.lat,KOFUN.lng],{radius:R_CLOSE,color:'#c07030',weight:1.5,opacity:0,fillOpacity:0}).addTo(map);
+  let circleNear  = L.circle([KOFUN.lat,KOFUN.lng],{radius:R_NEAR, color:'#4a5e2f',weight:2,  opacity:0,fillOpacity:0}).addTo(map);
+  const circleShown={mid:false,close:false,near:false};
 
-  function revealCircle(circle, color, fillOpacity, strokeOpacity) {
-    let op = 0;
-    const iv = setInterval(() => {
-      op += 0.05;
-      if (op >= 1) { op = 1; clearInterval(iv); }
-      circle.setStyle({ opacity: strokeOpacity * op, fillOpacity: fillOpacity * op });
-    }, 30);
+  function revealCircle(circle,color,fillOp,strokeOp){
+    let op=0;
+    const iv=setInterval(()=>{
+      op+=0.05; if(op>=1){op=1;clearInterval(iv);}
+      circle.setStyle({opacity:strokeOp*op,fillOpacity:fillOp*op});
+    },30);
   }
 
   // ========== 距離計算 ==========
-  function calcDistance(lat1, lng1, lat2, lng2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  function calcDistance(lat1,lng1,lat2,lng2){
+    const R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+    const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
 
   // ========== GPS ==========
-  function startWatching() {
-    if (!navigator.geolocation) { alert('位置情報非対応'); return; }
-    const btn = document.getElementById('locateBtn');
-    btn.disabled = true;
-    btn.textContent = '取得中…';
-    setGps('on', 'GPS取得中');
-    if (watchId) navigator.geolocation.clearWatch(watchId);
-    watchId = navigator.geolocation.watchPosition(onPosition, onError,
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  function startWatching(){
+    if(!navigator.geolocation){alert('位置情報非対応');return;}
+    const btn=document.getElementById('locateBtn');
+    btn.disabled=true; btn.textContent='取得中…';
+    setGps('on','GPS取得中');
+    if(watchId) navigator.geolocation.clearWatch(watchId);
+    watchId=navigator.geolocation.watchPosition(onPosition,onError,
+      {enableHighAccuracy:true,timeout:15000,maximumAge:0});
   }
 
-  function onPosition(pos) {
-    const { latitude: lat, longitude: lng } = pos.coords;
-    const btn = document.getElementById('locateBtn');
-    if (btn.textContent === '取得中…') {
-      btn.disabled = false;
-      btn.textContent = '現在地を更新中 ●';
+  function onPosition(pos){
+    const {latitude:lat,longitude:lng}=pos.coords;
+    const btn=document.getElementById('locateBtn');
+    if(btn.textContent==='取得中…'){btn.disabled=false;btn.textContent='現在地を更新中 ●';}
+    setGps('on','取得済み');
+    if(userMarker){
+      userMarker.setLatLng([lat,lng]);
+    }else{
+      const icon=L.divIcon({className:'',
+        html:`<div style="width:16px;height:16px;background:#4a9fff;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(74,159,255,0.8);"></div>`,
+        iconSize:[16,16],iconAnchor:[8,8]});
+      userMarker=L.marker([lat,lng],{icon}).addTo(map).bindPopup('現在地');
+      map.setView([lat,lng],15);
     }
-    setGps('on', '取得済み');
-    if (userMarker) {
-      userMarker.setLatLng([lat, lng]);
-    } else {
-      const userIcon = L.divIcon({
-        className: '',
-        html: `<div style="width:16px;height:16px;background:#4a9fff;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(74,159,255,0.8);"></div>`,
-        iconSize: [16,16], iconAnchor: [8,8]
-      });
-      userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map).bindPopup('現在地');
-      map.setView([lat, lng], 15);
-    }
-    if (!isUnlocked) {
-      const dist = calcDistance(lat, lng, KOFUN.lat, KOFUN.lng);
-      updateDistanceUI(dist);
-    }
+    if(!isUnlocked) updateDistanceUI(calcDistance(lat,lng,KOFUN.lat,KOFUN.lng));
   }
 
-  function onError(err) {
-    const btn = document.getElementById('locateBtn');
-    btn.disabled = false; btn.textContent = '再取得する';
-    setGps('err', 'エラー');
-    const msgs = { 1:'位置情報が拒否されました。', 2:'位置情報を取得できませんでした。', 3:'タイムアウトしました。' };
-    document.getElementById('distStatus').textContent = msgs[err.code] || 'エラー';
-    document.getElementById('distStatus').className = 'distance-status status-far';
+  function onError(err){
+    const btn=document.getElementById('locateBtn');
+    btn.disabled=false; btn.textContent='再取得する';
+    setGps('err','エラー');
+    const msgs={1:'位置情報が拒否されました。',2:'位置情報を取得できませんでした。',3:'タイムアウトしました。'};
+    document.getElementById('distStatus').textContent=msgs[err.code]||'エラー';
+    document.getElementById('distStatus').className='distance-status status-far';
   }
 
-  function setGps(state, label) {
-    document.getElementById('gpsDot').className = 'gps-dot ' + state;
-    document.getElementById('gpsLabel').textContent = label;
+  function setGps(state,label){
+    document.getElementById('gpsDot').className='gps-dot '+state;
+    document.getElementById('gpsLabel').textContent=label;
   }
 
   // ========== UI更新 ==========
-  function updateDistanceUI(dist) {
-    const valEl = document.getElementById('distVal');
-    const statusEl = document.getElementById('distStatus');
-    valEl.innerHTML = dist >= 1000
-      ? (dist/1000).toFixed(2) + '<span>km</span>'
-      : Math.round(dist) + '<span>m</span>';
-
-    if (dist <= R_NEAR) {
-      statusEl.textContent = '◎ 古墳の真近！地図を解禁できます';
-      statusEl.className = 'distance-status status-near';
-      if (!circleShown.near) {
-        circleShown.near = true;
-        circleNear.setStyle({ color: '#7ec870', fillColor: '#7ec870' });
-        revealCircle(circleNear, '#7ec870', 0.3, 0.9);
-      }
-      if (!isUnlocked) {
-        const locBtn = document.getElementById('locateBtn');
-        locBtn.textContent = '⛩ 地図を解禁する';
-        locBtn.classList.add('near-mode');
-        locBtn.onclick = unlockMap;
-      }
-    } else if (dist <= R_CLOSE) {
-      statusEl.textContent = '▲ もう少し！（100m以内）';
-      statusEl.className = 'distance-status status-near';
-      if (!circleShown.close) {
-        circleShown.close = true;
-        revealCircle(circleClose, '#c07030', 0.1, 0.7);
-      }
-      if (!isUnlocked) resetLocateBtn();
-    } else if (dist <= R_MID) {
-      statusEl.textContent = '● さらに近づいてください（500m以内）';
-      statusEl.className = 'distance-status status-mid';
-      if (!circleShown.mid) {
-        circleShown.mid = true;
-        revealCircle(circleMid, '#8b3a1a', 0.08, 0.7);
-      }
-      if (!isUnlocked) resetLocateBtn();
-    } else if (dist <= R_FAR) {
-      statusEl.textContent = '〇 古墳を感知しました（1km以内）';
-      statusEl.className = 'distance-status status-far';
-      if (!isUnlocked) resetLocateBtn();
-    } else {
-      statusEl.textContent = '古墳の範囲外です';
-      statusEl.className = 'distance-status status-waiting';
-      if (!isUnlocked) resetLocateBtn();
+  function updateDistanceUI(dist){
+    const valEl=document.getElementById('distVal');
+    const statusEl=document.getElementById('distStatus');
+    valEl.innerHTML=dist>=1000?(dist/1000).toFixed(2)+'<span>km</span>':Math.round(dist)+'<span>m</span>';
+    if(dist<=R_NEAR){
+      statusEl.textContent='◎ 古墳の真近！地図を解禁できます';
+      statusEl.className='distance-status status-near';
+      if(!circleShown.near){circleShown.near=true;circleNear.setStyle({color:'#7ec870',fillColor:'#7ec870'});revealCircle(circleNear,'#7ec870',0.3,0.9);}
+      if(!isUnlocked){const b=document.getElementById('locateBtn');b.textContent='⛩ 地図を解禁する';b.classList.add('near-mode');b.onclick=unlockMap;}
+    }else if(dist<=R_CLOSE){
+      statusEl.textContent='▲ もう少し！（100m以内）';
+      statusEl.className='distance-status status-near';
+      if(!circleShown.close){circleShown.close=true;revealCircle(circleClose,'#c07030',0.1,0.7);}
+      if(!isUnlocked) resetLocateBtn();
+    }else if(dist<=R_MID){
+      statusEl.textContent='● さらに近づいてください（500m以内）';
+      statusEl.className='distance-status status-mid';
+      if(!circleShown.mid){circleShown.mid=true;revealCircle(circleMid,'#8b3a1a',0.08,0.7);}
+      if(!isUnlocked) resetLocateBtn();
+    }else if(dist<=R_FAR){
+      statusEl.textContent='〇 古墳を感知しました（1km以内）';
+      statusEl.className='distance-status status-far';
+      if(!isUnlocked) resetLocateBtn();
+    }else{
+      statusEl.textContent='古墳の範囲外です';
+      statusEl.className='distance-status status-waiting';
+      if(!isUnlocked) resetLocateBtn();
     }
   }
 
-  function resetLocateBtn() {
-    const locBtn = document.getElementById('locateBtn');
-    if (locBtn.classList.contains('near-mode')) {
-      locBtn.textContent = '現在地を更新中 ●';
-      locBtn.classList.remove('near-mode');
-      locBtn.onclick = startWatching;
-    }
+  function resetLocateBtn(){
+    const b=document.getElementById('locateBtn');
+    if(b.classList.contains('near-mode')){b.textContent='現在地を更新中 ●';b.classList.remove('near-mode');b.onclick=startWatching;}
   }
 
   // ========== 地図解禁 ==========
-  function unlockMap() {
-    console.log('[DEBUG] unlockMap 呼ばれた。isUnlocked=', isUnlocked);
-    if (isUnlocked) return;
-    isUnlocked = true;
-    console.log('[DEBUG] KOFUN.areaId=', KOFUN.areaId, ' KOFUN=', KOFUN.name);
+  function unlockMap(){
+    if(isUnlocked) return;
+    isUnlocked=true;
 
-    // 距離パネルを消す
-    const panel = document.getElementById('distPanel');
+    const panel=document.getElementById('distPanel');
     panel.classList.add('hidden');
-    setTimeout(() => panel.style.display = 'none', 700);
+    setTimeout(()=>panel.style.display='none',700);
 
-    // ボタンを「次の古墳を探る」に変化（2秒後）
-    const locBtn = document.getElementById('locateBtn');
-    setTimeout(() => {
-      locBtn.textContent = '🧭 次の古墳を探る';
+    const locBtn=document.getElementById('locateBtn');
+    setTimeout(()=>{
+      locBtn.textContent='🧭 次の古墳を探る';
       locBtn.classList.remove('near-mode');
       locBtn.classList.add('search-mode');
-      locBtn.disabled = false;
-      locBtn.onclick = searchNextKofun;
-    }, 2000);
+      locBtn.disabled=false;
+      locBtn.onclick=searchNextKofun;
+    },2000);
 
-    // トースト
-    const toast = document.getElementById('toast');
+    const toast=document.getElementById('toast');
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3500);
+    setTimeout(()=>toast.classList.remove('show'),3500);
 
-    // 古墳マーカーを追加
     unlockedKofunSet.add(currentKofunIndex);
-    if (!kofunMarkers[currentKofunIndex]) {
-      kofunMarkers[currentKofunIndex] = L.marker([KOFUN.lat, KOFUN.lng], { icon: kofunIcon })
+    if(!kofunMarkers[currentKofunIndex]){
+      kofunMarkers[currentKofunIndex]=L.marker([KOFUN.lat,KOFUN.lng],{icon:kofunIcon})
         .addTo(map)
-        .bindPopup(`<b>${KOFUN.name}</b><br>${KOFUN.desc}`, {
-          closeButton: true, autoClose: false, closeOnClick: false
-        });
+        .bindPopup(`<b>${KOFUN.name}</b><br>${KOFUN.desc}`,{closeButton:true,autoClose:false,closeOnClick:false});
     }
 
-    // ── エリア解禁 ──
-    const areaId = KOFUN.areaId;
-    const isNewArea = !unlockedAreaSet.has(areaId);
-    unlockedAreaSet.add(areaId);
+    const areaId=KOFUN.areaId;
+    if(!unlockedAreaSet.has(areaId)){
+      unlockedAreaSet.add(areaId);
 
-    // 境界線を強調
-    areaPolygons[areaId].setStyle({
-      color: AREAS[areaId].color, weight: 3, opacity: 0.9, dashArray: null
-    });
+      // 境界線を強調
+      areaPolygons[areaId].setStyle({color:AREAS[areaId].color,weight:3,opacity:0.9,dashArray:null});
 
-    // 解禁エリアを「剥がれる」演出でクリップに登録
-    console.log('[DEBUG] areaId=', areaId, 'AREAS[areaId]=', AREAS[areaId]);
-    console.log('[DEBUG] paneEl=', paneEl);
-
-    // まず即座にクリップを適用してテスト
-    unlockedAreaPolygons[areaId] = AREAS[areaId].polygon;
-    rebuildClip();
-    console.log('[DEBUG] rebuildClip完了。paneEl.style.clipPath=', paneEl.style.clipPath);
-    console.log('[DEBUG] maskClip innerHTML=', maskClip.innerHTML);
-
-    setTimeout(() => { if (map.getZoom() > 16) map.setZoom(16); }, 2000);
+      // マスクをフェードアウト → 歴史地図が露出
+      const mask=areaMaskLayers[areaId];
+      let op=0.97;
+      const iv=setInterval(()=>{
+        op-=0.02;
+        if(op<=0){op=0;clearInterval(iv);map.removeLayer(mask);}
+        mask.setStyle({fillOpacity:op});
+      },40);
+    }
+    setTimeout(()=>{if(map.getZoom()>16)map.setZoom(16);},2000);
   }
 
   // ========== 次の古墳を探る ==========
-  function searchNextKofun() {
-    let nearestIdx = -1, nearestDist = Infinity;
-    if (userMarker) {
-      const { lat, lng } = userMarker.getLatLng();
-      KOFUN_LIST.forEach((k, i) => {
-        if (unlockedKofunSet.has(i)) return;
-        const d = calcDistance(lat, lng, k.lat, k.lng);
-        if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+  function searchNextKofun(){
+    let nearestIdx=-1,nearestDist=Infinity;
+    if(userMarker){
+      const {lat,lng}=userMarker.getLatLng();
+      KOFUN_LIST.forEach((k,i)=>{
+        if(unlockedKofunSet.has(i)) return;
+        const d=calcDistance(lat,lng,k.lat,k.lng);
+        if(d<nearestDist){nearestDist=d;nearestIdx=i;}
       });
     }
-    if (nearestIdx === -1) {
-      const locBtn = document.getElementById('locateBtn');
-      locBtn.textContent = '✨ 全古墳を制覇！';
-      locBtn.disabled = true;
-      return;
+    if(nearestIdx===-1){
+      const b=document.getElementById('locateBtn');
+      b.textContent='✨ 全古墳を制覇！';b.disabled=true;return;
     }
-    currentKofunIndex = nearestIdx;
-    KOFUN = KOFUN_LIST[currentKofunIndex];
-
-    circleFar.setLatLng([KOFUN.lat, KOFUN.lng]);
-    circleMid.setLatLng([KOFUN.lat, KOFUN.lng]);
-    circleClose.setLatLng([KOFUN.lat, KOFUN.lng]);
-    circleNear.setLatLng([KOFUN.lat, KOFUN.lng]);
-    circleMid.setStyle({ opacity: 0, fillOpacity: 0 });
-    circleClose.setStyle({ opacity: 0, fillOpacity: 0 });
-    circleNear.setStyle({ color: '#4a5e2f', fillColor: '#4a5e2f', opacity: 0, fillOpacity: 0 });
-    circleShown.mid = false; circleShown.close = false; circleShown.near = false;
-
-    map.flyTo([KOFUN.lat, KOFUN.lng], 14, { animate: true, duration: 2.0 });
-    isUnlocked = false;
-
-    const panel = document.getElementById('distPanel');
-    panel.style.display = '';
-    setTimeout(() => panel.classList.remove('hidden'), 50);
-
-    const locBtn = document.getElementById('locateBtn');
-    locBtn.textContent = '現在地を更新中 ●';
-    locBtn.classList.remove('search-mode');
-    locBtn.onclick = startWatching;
-
-    if (userMarker) {
-      const { lat, lng } = userMarker.getLatLng();
-      updateDistanceUI(calcDistance(lat, lng, KOFUN.lat, KOFUN.lng));
+    currentKofunIndex=nearestIdx; KOFUN=KOFUN_LIST[currentKofunIndex];
+    circleFar.setLatLng([KOFUN.lat,KOFUN.lng]);
+    circleMid.setLatLng([KOFUN.lat,KOFUN.lng]);
+    circleClose.setLatLng([KOFUN.lat,KOFUN.lng]);
+    circleNear.setLatLng([KOFUN.lat,KOFUN.lng]);
+    circleMid.setStyle({opacity:0,fillOpacity:0});
+    circleClose.setStyle({opacity:0,fillOpacity:0});
+    circleNear.setStyle({color:'#4a5e2f',fillColor:'#4a5e2f',opacity:0,fillOpacity:0});
+    circleShown.mid=false;circleShown.close=false;circleShown.near=false;
+    map.flyTo([KOFUN.lat,KOFUN.lng],14,{animate:true,duration:2.0});
+    isUnlocked=false;
+    const panel=document.getElementById('distPanel');
+    panel.style.display='';
+    setTimeout(()=>panel.classList.remove('hidden'),50);
+    const b=document.getElementById('locateBtn');
+    b.textContent='現在地を更新中 ●';b.classList.remove('search-mode');b.onclick=startWatching;
+    if(userMarker){
+      const {lat,lng}=userMarker.getLatLng();
+      updateDistanceUI(calcDistance(lat,lng,KOFUN.lat,KOFUN.lng));
     }
   }
 </script>
